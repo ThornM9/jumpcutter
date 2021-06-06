@@ -5,6 +5,24 @@ Go here for a more polished version of this software that my friends and I have 
 
 Since my GitHub is more like a dumping ground or personal journal, I'm not going to be actively updating this GitHub repo. But if you do want a version of jumpcutter that is actively being worked on, please do check on the version at https://jumpcutter.com/! There's way more developers fixing bugs and adding new features to that tool, and there's a developer's Discord server to discuss anything JC-related, so go check it out!
 
+# Binaries
+There are some pre-built binaries, using these are the easiest way to use jumpcutter. 
+
+1. Download the binary for your operating system from the releases tab of the github repo
+2. Open your terminal and navigate to the folder containing the binary executable.
+
+Basic usage:
+
+`jumpcutter --input_file <input media path> --sounded_speed <speed multiplier> --silent_speed <speed multiplier>`
+
+Process a folder of media:
+
+`jumpcutter --input_folder <input directory> --sounded_speed <speed multiplier> --silent_speed <speed multiplier>`
+
+More information and configuration options:
+
+`jumpcutter --help`
+
 ## Some heads-up:
 
 It uses Python 3.
