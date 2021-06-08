@@ -46,12 +46,17 @@ temporary folder. If your video is long and has high resolution and frame rate, 
 `nix-build` to get a script with all the libraries and ffmpeg, `nix-build -A bundle` to get a single binary.
 
 ## Results
-Personally, I use this tool to watch lectures when I'm really far behind on my course. To show how much time you save using this tool, I ran it on an entire semester of lecture videos for one math ssubject.
+Personally, I use this tool to watch lectures when I'm really far behind on my course. To show how much time you save using this tool, I ran it on an entire semester of lecture videos for one math subject.
 
 Sounded speed: 1.5x
+
 Silent speed: 8x
+
 Total duration of content: 1329 minutes
+
 Total duration without jumpcutter at 1.5x: 886 minutes
+
 Total duration with jumpcutter: 632 minutes
+
 
 That's a saving of over 4.2 hours over 22.2 hours of original content, 29% faster than watching at flat 1.5x speed.
