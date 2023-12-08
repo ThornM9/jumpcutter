@@ -20,6 +20,8 @@ Process a folder of media:
 
 `jumpcutter --input_folder <input directory> --sounded_speed <speed multiplier> --silent_speed <speed multiplier>`
 
+If you're processing a folder, it's probably useful to use the multithreading feature, which you can use with `--threads <number of threads>`. This will make the terminal output gibberish, but it will finish your folder a lot faster!
+
 More information and configuration options:
 
 `jumpcutter --help`

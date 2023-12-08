@@ -5,6 +5,7 @@ from audiotsm import phasevocoder
 from audiotsm.io.wav import WavReader, WavWriter
 from scipy.io import wavfile
 import numpy as np
+import threading
 import re
 import math
 from shutil import copyfile, rmtree
@@ -24,7 +25,7 @@ def getMaxVolume(s):
     minv = float(np.min(s))
     return max(maxv,-minv)
 
-def copyFrame(inputFrame,outputFrame):
+def copyFrame(TEMP_FOLDER, inputFrame, outputFrame):
     src = TEMP_FOLDER+"/frame{:06d}".format(inputFrame+1)+".jpg"
     dst = TEMP_FOLDER+"/newFrame{:06d}".format(outputFrame+1)+".jpg"
     if not os.path.isfile(src):
@@ -39,10 +40,8 @@ def inputToOutputFilename(filename):
     return filename[:dotIndex]+"_ALTERED"+filename[dotIndex:]
 
 def createPath(s):
-    #assert (not os.path.exists(s)), "The filepath "+s+" already exists. Don't want to overwrite it. Aborting."
-
     try:  
-        os.mkdir(s)
+        os.makedirs(s)
     except OSError:  
         assert False, "Creation of the directory %s failed. (The TEMP folder may already exist. Delete or rename it, and try again.)"
 
@@ -52,6 +51,12 @@ def deletePath(s): # Dangerous! Watch out!
     except OSError:  
         print ("Deletion of the directory %s failed" % s)
         print(OSError)
+
+def extract_filename(directory_path):
+    filename_with_extension = os.path.basename(directory_path)
+    filename, ext = os.path.splitext(filename_with_extension)
+    
+    return (filename, ext)
 
 parser = argparse.ArgumentParser(description='Modifies a video file to play at different speeds when there is sound vs. silence.')
 parser.add_argument('--input_file', type=str,  help='the video file you want modified')
@@ -65,10 +70,10 @@ parser.add_argument('--frame_margin', type=float, default=1, help="some silent f
 parser.add_argument('--sample_rate', type=float, default=44100, help="sample rate of the input and output videos")
 parser.add_argument('--frame_rate', type=float, default=30, help="frame rate of the input and output videos. optional... I try to find it out myself, but it doesn't always work.")
 parser.add_argument('--frame_quality', type=int, default=3, help="quality of frames to be extracted from input video. 1 is highest, 31 is lowest, 3 is the default.")
+parser.add_argument('--threads', type=int, default=1, help="number of threads to use while processing videos")
 
 args = parser.parse_args()
 
-frameRate = args.frame_rate
 SAMPLE_RATE = args.sample_rate
 SILENT_THRESHOLD = args.silent_threshold
 FRAME_SPREADAGE = args.frame_margin
@@ -76,9 +81,9 @@ NEW_SPEED = [args.silent_speed, args.sounded_speed]
 if args.url != None:
     INPUT_FILES = [downloadFile(args.url)]
 elif args.input_folder != None:
+    # This assumes that all files in the directory are videos, ffmpeg will raise an error otherwise
     INPUT_FILES = []
-    for fn in os.listdir(args.input_folder):
-        # This assumes that all files in the directory are videos, ffmpeg will raise an error otherwise
+    for fn in os.listdir(args.input_folder):    
         if "ALTERED" not in fn:
             INPUT_FILES.append(os.path.join(args.input_folder, fn))
 else:
@@ -86,7 +91,9 @@ else:
 URL = args.url
 FRAME_QUALITY = args.frame_quality
 
-for INPUT_FILE in INPUT_FILES:
+def process_file(INPUT_FILE):
+    frameRate = args.frame_rate
+
     start = time.time()
     assert INPUT_FILE != None , "why u put no input file, that dum"
         
@@ -97,9 +104,9 @@ for INPUT_FILE in INPUT_FILES:
 
     if os.path.exists(OUTPUT_FILE):
         print(f"{OUTPUT_FILE} already exists, skipping this file")
-        continue
+        return
 
-    TEMP_FOLDER = "TEMP"
+    TEMP_FOLDER = f"TEMP/{extract_filename(INPUT_FILE)[0]}"
     AUDIO_FADE_ENVELOPE_SIZE = 400 # smooth out transitiion's audio by quickly fading in/out (arbitrary magic number whatever)
         
     createPath(TEMP_FOLDER)
@@ -114,8 +121,6 @@ for INPUT_FILE in INPUT_FILES:
     command = "ffmpeg -i "+TEMP_FOLDER+"/input.mp4 2>&1"
     f = open(TEMP_FOLDER+"/params.txt", "w")
     subprocess.call(command, shell=True, stdout=f)
-
-
 
     sampleRate, audioData = wavfile.read(TEMP_FOLDER+"/audio.wav")
     audioSampleCount = audioData.shape[0]
@@ -193,21 +198,21 @@ for INPUT_FILE in INPUT_FILES:
         endOutputFrame = int(math.ceil(endPointer/samplesPerFrame))
         for outputFrame in range(startOutputFrame, endOutputFrame):
             inputFrame = int(chunk[0]+NEW_SPEED[int(chunk[2])]*(outputFrame-startOutputFrame))
-            didItWork = copyFrame(inputFrame,outputFrame)
+            didItWork = copyFrame(TEMP_FOLDER, inputFrame, outputFrame)
             if didItWork:
                 lastExistingFrame = inputFrame
             else:
-                copyFrame(lastExistingFrame,outputFrame)
+                copyFrame(TEMP_FOLDER, lastExistingFrame,outputFrame)
 
         outputPointer = endPointer
 
     wavfile.write(TEMP_FOLDER+"/audioNew.wav",SAMPLE_RATE,outputAudioData)
 
-    '''
-    outputFrame = math.ceil(outputPointer/samplesPerFrame)
-    for endGap in range(outputFrame,audioFrameCount):
-        copyFrame(int(audioSampleCount/samplesPerFrame)-1,endGap)
-    '''
+    # '''
+    # outputFrame = math.ceil(outputPointer/samplesPerFrame)
+    # for endGap in range(outputFrame,audioFrameCount):
+    #     copyFrame(int(audioSampleCount/samplesPerFrame)-1,endGap)
+    # '''
 
     command = "ffmpeg -framerate "+str(frameRate)+" -i "+TEMP_FOLDER+"/newFrame%06d.jpg -i "+TEMP_FOLDER+"/audioNew.wav -strict -2 "+OUTPUT_FILE
     subprocess.call(command, shell=True)
@@ -216,4 +221,32 @@ for INPUT_FILE in INPUT_FILES:
 
     end = time.time()
     print(f"Completed {INPUT_FILE} in {end - start}s")
+
+
+def process_files(thread_id, files_per_thread):
+    for i in range(thread_id * files_per_thread, min((thread_id + 1) * files_per_thread, len(INPUT_FILES))):
+        process_file(INPUT_FILES[i])
+
+
+def main():
+    num_threads = min(args.threads, os.cpu_count(), len(INPUT_FILES)) # can't be more threads than available cores or files to process
+    files_per_thread = len(INPUT_FILES) // num_threads # spread the work evenly as possible across threads
+    remaining_files = len(INPUT_FILES) % num_threads
+    threads = []
+
+    for i in range(num_threads):
+        thread_files = files_per_thread
+        if i < remaining_files:
+            thread_files += 1
+
+        thread = threading.Thread(target=process_files, args=(i, thread_files))
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+
+if __name__ == "__main__":
+    main()
 
