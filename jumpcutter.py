@@ -231,7 +231,7 @@ def process_files(thread_id, files_per_thread):
 def main():
     num_threads = min(args.threads, os.cpu_count(), len(INPUT_FILES)) # can't be more threads than available cores or files to process
     files_per_thread = len(INPUT_FILES) // num_threads # spread the work evenly as possible across threads
-    remaining_files = len(INPUT_FILES) % num_threads
+    remaining_files = (len(INPUT_FILES) % num_threads) + 1
     threads = []
 
     for i in range(num_threads):
